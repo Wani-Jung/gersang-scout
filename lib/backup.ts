@@ -43,8 +43,12 @@ const LEGACY_NOTI_ID = 'sword-done'; // v1.1.0 까지 쓰던 알림 id
 type BackupData = Record<string, unknown>;
 export type ParsedBackup = { data: BackupData } | { error: string };
 
-type SaminRecord = { id: string; startedAt: number; completedAt: number; manual?: boolean };
-type SaminStore = { active: { startedAt: number } | null; records: SaminRecord[] };
+// 임무 종류: 'sam' 삼인검, 'sa' 사인검. 값이 없으면(예전 기록) 삼인검으로 본다. (app/samingeom.tsx 의 Kind 와 같은 값)
+type SaminKind = 'sam' | 'sa';
+type SaminRecord = { id: string; startedAt: number; completedAt: number; manual?: boolean; kind?: SaminKind };
+type SaminStore = { active: { startedAt: number; kind?: SaminKind } | null; records: SaminRecord[] };
+
+const isKind = (v: unknown): v is SaminKind => v === 'sam' || v === 'sa';
 
 const two = (n: number) => String(n).padStart(2, '0');
 
@@ -60,7 +64,7 @@ function normalizeSamin(v: unknown): SaminStore | null {
   let active: SaminStore['active'] = null;
   if (v.active !== null && v.active !== undefined) {
     if (!isPlainObject(v.active) || !isNum(v.active.startedAt)) return null;
-    active = { startedAt: v.active.startedAt };
+    active = { startedAt: v.active.startedAt, ...(isKind(v.active.kind) ? { kind: v.active.kind } : {}) };
   }
 
   const records: SaminRecord[] = [];
@@ -71,7 +75,13 @@ function normalizeSamin(v: unknown): SaminStore | null {
     let id = typeof r.id === 'string' && r.id ? r.id : `rec-${r.completedAt}-${i}`;
     while (seen.has(id)) id += '_';
     seen.add(id);
-    records.push({ id, startedAt: r.startedAt, completedAt: r.completedAt, ...(r.manual === true ? { manual: true } : {}) });
+    records.push({
+      id,
+      startedAt: r.startedAt,
+      completedAt: r.completedAt,
+      ...(r.manual === true ? { manual: true } : {}),
+      ...(isKind(r.kind) ? { kind: r.kind } : {}),
+    });
   }
   return { active, records };
 }
@@ -214,9 +224,13 @@ export function parseBackup(text: string): ParsedBackup {
 export function summarizeBackup(d: BackupData) {
   const h = d[KEY.history];
   const s = d[KEY.samin] as SaminStore | undefined;
+  const sa = s ? s.records.filter((r) => r.kind === 'sa').length : 0;
+  const total = s ? s.records.length : 0;
   return {
     days: Array.isArray(h) ? h.length : 0,
-    runs: s ? s.records.length : 0,
+    runs: total, // 삼인검 + 사인검
+    sam: total - sa, // 종류가 없는 예전 기록은 삼인검
+    sa,
     running: !!s && s.active !== null,
   };
 }
@@ -229,9 +243,10 @@ async function restoreSaminAlarm(store: SaminStore | undefined) {
     if (!store || !store.active) return;
     const endAt = store.active.startedAt + SAMIN_DURATION_MS;
     if (endAt <= Date.now()) return;
+    const label = store.active.kind === 'sa' ? '사인검' : '삼인검'; // samingeom.tsx 의 알림 문구와 같게
     await Notifications.scheduleNotificationAsync({
       identifier: SAMIN_NOTI_ID,
-      content: { title: '삼인검', body: '삼인검 임무가 끝났습니다. 보상을 받아가세요.' },
+      content: { title: label, body: `${label} 임무가 끝났습니다. 보상을 받아가세요.` },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(endAt) },
     });
   } catch (e) {

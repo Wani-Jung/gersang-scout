@@ -8,10 +8,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 const STORAGE_KEY = '@gersang_samin_v1';
 const NOTI_ID = 'samin-done';
 
-const DURATION_MS = 30 * 60 * 60 * 1000;  // 삼인검 임무 30시간
+const DURATION_MS = 30 * 60 * 60 * 1000;  // 임무 30시간 (삼인검·사인검 모두 같다고 보고 한 값을 쓴다)
 
-type Record = { id: string; startedAt: number; completedAt: number; manual?: boolean };
-type Active = { startedAt: number } | null;
+// 임무 종류. 저장된 값에 kind 가 없으면(예전 기록) 삼인검으로 본다. lib/backup.ts 의 SaminKind 와 같은 값.
+type Kind = 'sam' | 'sa';
+const KIND_LIST: Kind[] = ['sam', 'sa'];
+const KINDS: { [K in Kind]: { label: string; short: string; color: string } } = {
+  sam: { label: '삼인검', short: '삼', color: '#6c5ce7' },
+  sa: { label: '사인검', short: '사', color: '#e17055' },
+};
+const kindOf = (k?: Kind): Kind => (k === 'sa' ? 'sa' : 'sam');
+
+type Record = { id: string; startedAt: number; completedAt: number; manual?: boolean; kind?: Kind };
+type Active = { startedAt: number; kind?: Kind } | null;
 type Store = { active: Active; records: Record[] };
 
 const EMPTY: Store = { active: null, records: [] };
@@ -67,6 +76,7 @@ export default function SaminScreen() {
   const [now, setNow] = useState(Date.now());
   const [dialog, setDialog] = useState(false);
   const [draftStart, setDraftStart] = useState(Date.now());
+  const [draftKind, setDraftKind] = useState<Kind>('sam');
   const tick = useRef<any>(null);
 
   useEffect(() => { load(); }, []);
@@ -87,7 +97,7 @@ export default function SaminScreen() {
       if (!raw) return;
       const parsed = JSON.parse(raw);
       setStore({
-        active: parsed?.active?.startedAt ? { startedAt: parsed.active.startedAt } : null,
+        active: parsed?.active?.startedAt ? { startedAt: parsed.active.startedAt, kind: kindOf(parsed.active.kind) } : null,
         records: Array.isArray(parsed?.records) ? parsed.records : [],
       });
     } catch (e) { console.log('삼인검 불러오기 실패:', e); }
@@ -98,13 +108,14 @@ export default function SaminScreen() {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   }, []);
 
-  const scheduleAlarm = async (endAt: number) => {
+  const scheduleAlarm = async (endAt: number, kind: Kind) => {
     try {
       await Notifications.cancelScheduledNotificationAsync(NOTI_ID).catch(() => { });
       if (endAt <= Date.now()) return;
+      const label = KINDS[kind].label; // lib/backup.ts 의 알림 문구와 같게
       await Notifications.scheduleNotificationAsync({
         identifier: NOTI_ID,
-        content: { title: '삼인검', body: '삼인검 임무가 끝났습니다. 보상을 받아가세요.' },
+        content: { title: label, body: `${label} 임무가 끝났습니다. 보상을 받아가세요.` },
         trigger: { type: 'date', date: new Date(endAt) } as any,
       });
     } catch (e) { console.log('삼인검 알림 실패:', e); }
@@ -116,10 +127,10 @@ export default function SaminScreen() {
 
   /* ── 동작 ── */
 
-  const startNow = async () => {
+  const startNow = async (kind: Kind) => {
     const at = Date.now();
-    await save({ ...store, active: { startedAt: at } });
-    await scheduleAlarm(at + DURATION_MS);
+    await save({ ...store, active: { startedAt: at, kind } });
+    await scheduleAlarm(at + DURATION_MS, kind);
   };
 
   const cancelRun = () => {
@@ -135,13 +146,14 @@ export default function SaminScreen() {
   const completeRun = async () => {
     if (!store.active) return;
     const startedAt = store.active.startedAt;
-    const rec: Record = { id: makeId(), startedAt, completedAt: startedAt + DURATION_MS };
+    const rec: Record = { id: makeId(), startedAt, completedAt: startedAt + DURATION_MS, kind: kindOf(store.active.kind) };
     await save({ active: null, records: [...store.records, rec] });
     await clearAlarm();
   };
 
   const openDialog = () => {
     setDraftStart(store.active ? store.active.startedAt : Date.now());
+    if (store.active) setDraftKind(kindOf(store.active.kind)); // 진행 중이면 그 종류부터, 아니면 마지막에 고른 종류 그대로
     setDialog(true);
   };
 
@@ -152,10 +164,10 @@ export default function SaminScreen() {
     const endAt = draftStart + DURATION_MS;
     setDialog(false);
     if (endAt > Date.now()) {
-      await save({ ...store, active: { startedAt: draftStart } });
-      await scheduleAlarm(endAt);
+      await save({ ...store, active: { startedAt: draftStart, kind: draftKind } });
+      await scheduleAlarm(endAt, draftKind);
     } else {
-      const rec: Record = { id: makeId(), startedAt: draftStart, completedAt: endAt, manual: true };
+      const rec: Record = { id: makeId(), startedAt: draftStart, completedAt: endAt, manual: true, kind: draftKind };
       const next = [...store.records, rec].sort((a, b) => a.completedAt - b.completedAt);
       await save({ ...store, records: next });
     }
@@ -180,7 +192,13 @@ export default function SaminScreen() {
   const progress = store.active ? Math.min(1, Math.max(0, (now - store.active.startedAt) / DURATION_MS)) : 0;
 
   const listed = [...store.records].sort((a, b) => b.completedAt - a.completedAt);
-  const indexOf = (r: Record) => store.records.findIndex((x) => x.id === r.id) + 1;
+  // 회차 번호는 종류별로 센다 (삼인검 3회차, 사인검 1회차 …)
+  const indexOf = (r: Record) => {
+    const same = store.records.filter((x) => kindOf(x.kind) === kindOf(r.kind)).sort((a, b) => a.completedAt - b.completedAt);
+    return same.findIndex((x) => x.id === r.id) + 1;
+  };
+  const samCount = store.records.filter((r) => kindOf(r.kind) === 'sam').length;
+  const saCount = count - samCount;
 
   const draftEnd = draftStart + DURATION_MS;
   const draftRunning = draftEnd > Date.now();
@@ -204,6 +222,9 @@ export default function SaminScreen() {
 
           {store.active ? (
             <>
+              <Text style={[styles.runKind, { color: KINDS[kindOf(store.active.kind)].color }]}>
+                {KINDS[kindOf(store.active.kind)].label}
+              </Text>
               {isDone ? (
                 <Text style={styles.doneBig}>완료 가능</Text>
               ) : (
@@ -233,9 +254,13 @@ export default function SaminScreen() {
           ) : (
             <>
               <Text style={styles.idleText}>진행 중인 임무가 없어요</Text>
-              <Pressable style={styles.primaryBtn} onPress={startNow}>
-                <Text style={styles.primaryBtnText}>지금 시작</Text>
-              </Pressable>
+              <View style={styles.kindRow}>
+                {KIND_LIST.map((k) => (
+                  <Pressable key={k} style={[styles.kindStartBtn, { backgroundColor: KINDS[k].color }]} onPress={() => startNow(k)}>
+                    <Text style={styles.primaryBtnText}>{KINDS[k].label} 시작</Text>
+                  </Pressable>
+                ))}
+              </View>
             </>
           )}
 
@@ -282,14 +307,21 @@ export default function SaminScreen() {
 
         {/* 기록 */}
         <View style={styles.card}>
-          <Text style={styles.cardLabel}>기록 ({count}회)</Text>
+          <Text style={styles.cardLabel}>
+            기록 ({count}회{saCount > 0 ? ` · 삼 ${samCount} · 사 ${saCount}` : ''})
+          </Text>
 
           {store.active && (
             <View style={styles.logRow}>
-              <View style={styles.badge}><Text style={styles.badgeText}>진행중</Text></View>
-              <Text style={styles.logRange}>
-                {formatShort(store.active.startedAt)} ~ {formatShort(endAt)}
-              </Text>
+              <View style={styles.logLeft}>
+                <View style={[styles.kindChip, { backgroundColor: KINDS[kindOf(store.active.kind)].color }]}>
+                  <Text style={styles.kindChipText}>{KINDS[kindOf(store.active.kind)].short}</Text>
+                </View>
+                <View style={[styles.badge, styles.badgeGap]}><Text style={styles.badgeText}>진행중</Text></View>
+                <Text style={[styles.logRange, styles.logRangeGap]}>
+                  {formatShort(store.active.startedAt)} ~ {formatShort(endAt)}
+                </Text>
+              </View>
             </View>
           )}
 
@@ -297,11 +329,16 @@ export default function SaminScreen() {
 
           {listed.map((r) => (
             <View key={r.id} style={styles.logRow}>
-              <Text style={styles.logText}>
-                <Text style={styles.logNo}>{indexOf(r)}회차</Text>
-                {'  ·  '}
-                {formatShort(r.startedAt)} ~ {formatShort(r.completedAt)}
-              </Text>
+              <View style={styles.logLeft}>
+                <View style={[styles.kindChip, { backgroundColor: KINDS[kindOf(r.kind)].color }]}>
+                  <Text style={styles.kindChipText}>{KINDS[kindOf(r.kind)].short}</Text>
+                </View>
+                <Text style={[styles.logText, styles.logRangeGap]}>
+                  <Text style={styles.logNo}>{indexOf(r)}회차</Text>
+                  {'  ·  '}
+                  {formatShort(r.startedAt)} ~ {formatShort(r.completedAt)}
+                </Text>
+              </View>
               <Pressable onPress={() => removeRecord(r.id)} hitSlop={12}>
                 <Text style={styles.del}>✕</Text>
               </Pressable>
@@ -316,6 +353,22 @@ export default function SaminScreen() {
         <View style={styles.dim}>
           <View style={styles.sheet}>
             <Text style={styles.sheetTitle}>지난 기록 추가</Text>
+
+            <View style={styles.kindPickRow}>
+              {KIND_LIST.map((k) => {
+                const on = draftKind === k;
+                return (
+                  <Pressable
+                    key={k}
+                    style={[styles.kindPick, on && { backgroundColor: KINDS[k].color, borderColor: KINDS[k].color }]}
+                    onPress={() => setDraftKind(k)}
+                  >
+                    <Text style={[styles.kindPickText, on && { color: '#fff' }]}>{KINDS[k].label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
             <Text style={styles.sheetSub}>임무를 시작한 시각을 맞춰주세요</Text>
             <Text style={styles.sheetSub}>종료는 30시간 뒤로 자동 계산돼요</Text>
 
@@ -436,4 +489,17 @@ const styles = StyleSheet.create({
   sheetButtons: { flexDirection: 'row', marginTop: 18 },
   ghostBtn: { flex: 1, backgroundColor: '#f1f3f7', borderRadius: 12, paddingVertical: 15, alignItems: 'center', marginRight: 10 },
   ghostBtnText: { color: '#6b7280', fontWeight: 'bold', fontSize: 16 },
+
+  // 임무 종류(삼인검/사인검)
+  runKind: { fontSize: 15, fontWeight: 'bold', textAlign: 'center', marginTop: 14 },
+  kindRow: { flexDirection: 'row', marginTop: 18 },
+  kindStartBtn: { flex: 1, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginHorizontal: 5 },
+  logLeft: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  logRangeGap: { marginLeft: 10, flexShrink: 1 },
+  badgeGap: { marginLeft: 8 },
+  kindChip: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  kindChipText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
+  kindPickRow: { flexDirection: 'row', marginTop: 14 },
+  kindPick: { flex: 1, borderWidth: 1.5, borderColor: '#dfe3e8', borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginHorizontal: 5, backgroundColor: '#fff' },
+  kindPickText: { fontSize: 16, fontWeight: 'bold', color: '#6b7280' },
 });

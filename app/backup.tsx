@@ -59,7 +59,7 @@ export default function BackupScreen() {
     const s = summarizeBackup(parsed.data);
     Alert.alert(
       '백업 불러오기',
-      `정탐 기록 ${s.days}일, 삼인검 ${s.runs}회${s.running ? ' (진행 중 1건 포함)' : ''}가 들어 있어요.\n지금 기록은 이 백업으로 바뀌어요. 계속할까요?`,
+      `정탐 기록 ${s.days}일, 삼인검 ${s.sam}회${s.sa > 0 ? `, 사인검 ${s.sa}회` : ''}${s.running ? ' (진행 중 1건 포함)' : ''}가 들어 있어요.\n지금 기록은 이 백업으로 바뀌어요. 계속할까요?`,
       [
         { text: '취소', style: 'cancel' },
         { text: '불러오기', style: 'destructive', onPress: () => doApply(parsed.data) },
