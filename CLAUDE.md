@@ -4,12 +4,12 @@
 
 - **설치는 GitHub Release 링크로만 한다. adb(USB 연결)는 쓰지 않는다.**
 - 고정 다운로드 링크: https://github.com/Wani-Jung/gersang-scout/releases/latest/download/gersang-scout.apk
-  (저장소가 비공개라서, 폰 브라우저에 GitHub 로그인이 되어 있어야 받아진다)
 - **키·비밀번호는 절대 커밋하지 않는다.** `*.keystore`, `key.properties`, `local.properties` 는 `.gitignore` 로 제외돼 있다.
   예외: 공개 디버그 키 `android/app/debug.keystore` (비밀번호가 공개된 키라 비밀이 아니다. 릴리스 키로 바꿀 때 제거한다).
   릴리스 키를 쓰게 되면 키스토어는 base64 로 GitHub Secrets 에만 넣는다 (KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD).
   비밀번호를 `gradle.properties` 같은 추적되는 파일에 평문으로 쓰지 않는다.
-- 비공개 저장소 Actions 무료 사용량은 월 2,000분이다.
+- **이 저장소는 공개(public)다. 커밋에 비밀(키·비밀번호·토큰)이 섞이면 즉시 누구에게나 노출되므로, 커밋·푸시 전에 `git diff --staged` 로 확인한다. 한 번 올라간 비밀은 지워도 이력에 남으니 폐기(재발급)한다.**
+- 공개 저장소라 GitHub Actions 사용량은 무제한(무료)이다.
 
 ## 새 버전 내는 법 ("새 버전 올려줘")
 
