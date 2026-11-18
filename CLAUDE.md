@@ -36,6 +36,8 @@
 ## 기타
 
 - `android/` 폴더는 CI 가 바로 빌드하려고 저장소에 커밋돼 있다 (`expo prebuild` 로 재생성하지 않는다).
+- **화면에서 AsyncStorage 키를 바꾸거나 새로 만들면** `lib/backup.ts` 의 `KEY` 목록도 같이 고치고, 옛 키의 기록을 새 키로 옮기는 코드를 둔다
+  (`migrateLegacySamin` 참고). 안 그러면 💾 백업에서 빠지거나, 업데이트 뒤 기록이 사라진 것처럼 보인다. 백업 시험은 가짜 저장소로 돌려서 확인한다.
 - 로컬에서 `android/` 에서 `gradlew assembleRelease` 로 빌드하는 것은 확인용이다. 서명 환경변수(`KEYSTORE_FILE`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`)가
   없으면 폰에 설치할 수 있게 서명된 APK 가 나오지 않는다. 폰에 설치하는 APK 는 항상 CI 가 만든 것을 쓴다.
 - 이 저장소의 서명 키를 바꿔야 하면(분실 등) 폰에서 앱 삭제 후 재설치가 필요하다. 위의 💾 백업 절차를 먼저 따른다.
