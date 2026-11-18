@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "정탐배럭",
+    "slug": "gersang-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "gersangapp",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#000000",
+        "foregroundImage": "./assets/icon.png"
+      },
+      "package": "com.wanijung.gersangapp"
+    },
+    "extra": {
+      "eas": { "projectId": "9e50e311-f733-46c6-a4a5-f2efbf77ece7" }
+    }
+  }
+}

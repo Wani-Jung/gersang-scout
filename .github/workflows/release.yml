@@ -1,0 +1,98 @@
+name: Release APK
+
+# v* 태그를 푸시하거나, Actions 탭에서 수동 실행하면 APK 를 빌드해서 GitHub Release 에 올린다.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '버전 이름 (예: 1.0.1). 비우면 1.0.<실행번호>'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  # 이 지문의 키로 서명됐을 때만 릴리스를 만든다.
+  # v1.0.0 단계: 공개 디버그 키(android/app/debug.keystore). 릴리스 키로 바꿀 때 함께 바꾼다.
+  EXPECTED_CERT_SHA256: fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c
+  # versionCode = 10 + 실행 번호. 로컬 빌드에서 이미 2 를 썼으므로 항상 그보다 크게 시작한다.
+  VERSION_CODE_BASE: '10'
+  # 고정 다운로드 링크를 위해 파일 이름은 항상 같게 한다.
+  APK_NAME: gersang-scout.apk
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 버전 정하기
+        id: ver
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: bash .github/scripts/resolve-version.sh
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: APK 빌드
+        working-directory: android
+        env:
+          VERSION_CODE: ${{ steps.ver.outputs.code }}
+          VERSION_NAME: ${{ steps.ver.outputs.name }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon \
+            -PciVersionCode="$VERSION_CODE" \
+            -PciVersionName="$VERSION_NAME" \
+            -PreactNativeArchitectures=armeabi-v7a,arm64-v8a
+
+      - name: APK 확인 (서명 키, 패키지, 버전)
+        env:
+          EXPECTED_VERSION_CODE: ${{ steps.ver.outputs.code }}
+          EXPECTED_VERSION_NAME: ${{ steps.ver.outputs.name }}
+        run: bash .github/scripts/verify-apk.sh android/app/build/outputs/apk/release/app-release.apk
+
+      - name: 파일 이름 고정
+        run: cp android/app/build/outputs/apk/release/app-release.apk "$APK_NAME"
+
+      - name: GitHub Release 에 올리기
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          VERSION_CODE: ${{ steps.ver.outputs.code }}
+        run: |
+          NOTES="versionCode ${VERSION_CODE} · 커밋 ${GITHUB_SHA::7}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK_NAME" --clobber
+            gh release edit "$TAG" --latest
+          else
+            gh release create "$TAG" "$APK_NAME" \
+              --target "$GITHUB_SHA" \
+              --title "$TAG" \
+              --notes "$NOTES" \
+              --latest
+          fi

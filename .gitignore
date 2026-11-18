@@ -1,0 +1,56 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# 서명 키·비밀번호는 절대 커밋하지 않는다. 공개 디버그 키(android/app/debug.keystore)만 예외.
+*.keystore
+!android/app/debug.keystore
+key.properties
+local.properties
+
+# 빌드 결과물
+*.apk
+*.aab
+android/app/build/
+android/build/
+android/.gradle/
+android/app/.cxx/
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+app-example
+
+# generated native folders (android/ 는 CI 에서 바로 빌드하려고 커밋한다)
+/ios
