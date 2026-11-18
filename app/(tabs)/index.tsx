@@ -31,6 +31,11 @@ const STORAGE_HISTORY_KEY = '@gersang_history_v8';
 const STORAGE_FINALIZED_KEY = '@gersang_finalized_v8';
 const STORAGE_ORDER_KEY = '@gersang_col_order_v8';
 const STORAGE_MISSION_KEY = '@gersang_mission_v8';
+const STORAGE_LOGIN_KEY = '@gersang_login_v1';   // 접속 체크 (미션처럼 매일 초기화). lib/backup.ts 의 KEY 와 같은 값
+
+// 계정별 대표 캐릭터 레벨. HEADERS 순서(열 번호)대로. 모르는 계정은 null (표시하지 않음).
+//   92(★ 들숨) 260 / mi(들쭉) 210 / 91(한양) 220 / 93(들숨반) 미정 / 94(날뻔) 210 / 57(가설) 250 / 58(모자) 미정 / 59(피겜) 221
+const LEVELS: (number | null)[] = [260, 210, 220, null, 210, 250, null, 221];
 
 // 각 열에서 기본 분모에 들어가는 칸 수 (합계 24칸)
 const ACTIVE_LIMITS = [3, 3, 3, 3, 3, 3, 3, 3];
@@ -83,6 +88,7 @@ export default function App() {
   const [gridState, setGridState] = useState(Array.from({ length: ROWS }, () => Array(COLS).fill(false)));
   const [headerState, setHeaderState] = useState(Array(COLS).fill(false));
   const [missionState, setMissionState] = useState(Array(COLS).fill(false));
+  const [loginState, setLoginState] = useState(Array(COLS).fill(false));
   const [historyData, setHistoryData] = useState([]);
   const [monthIndex, setMonthIndex] = useState(0);
   const [isFinalized, setIsFinalized] = useState(false);
@@ -186,10 +192,12 @@ export default function App() {
       const savedHistory = await AsyncStorage.getItem(STORAGE_HISTORY_KEY);
       const savedOrder = await AsyncStorage.getItem(STORAGE_ORDER_KEY);
       const savedMission = await AsyncStorage.getItem(STORAGE_MISSION_KEY);
+      const savedLogin = await AsyncStorage.getItem(STORAGE_LOGIN_KEY);
 
       let currentHistory = savedHistory ? JSON.parse(savedHistory) : [];
       if (savedHeader !== null) setHeaderState(normalizeFlags(JSON.parse(savedHeader)));
       if (savedMission !== null) setMissionState(normalizeFlags(JSON.parse(savedMission)));
+      if (savedLogin !== null) setLoginState(normalizeFlags(JSON.parse(savedLogin)));
 
       // 저장된 열 순서 복원 (개수가 맞는 정상 데이터일 때만)
       if (savedOrder !== null) {
@@ -274,6 +282,10 @@ export default function App() {
         const emptyMission = Array(COLS).fill(false);
         setMissionState(emptyMission);
         await AsyncStorage.setItem(STORAGE_MISSION_KEY, JSON.stringify(emptyMission));
+
+        const emptyLogin = Array(COLS).fill(false);
+        setLoginState(emptyLogin);
+        await AsyncStorage.setItem(STORAGE_LOGIN_KEY, JSON.stringify(emptyLogin));
         await AsyncStorage.setItem(STORAGE_DATE_KEY, todayKey);
       } else {
         if (savedGrid !== null) setGridState(normalizeGrid(JSON.parse(savedGrid)));
@@ -324,6 +336,14 @@ export default function App() {
     next[colId] = !next[colId];
     setMissionState(next);
     await AsyncStorage.setItem(STORAGE_MISSION_KEY, JSON.stringify(next));
+  };
+
+  const toggleLogin = async (colId: number) => {
+    if (isFinalized) return;
+    const next = [...loginState];
+    next[colId] = !next[colId];
+    setLoginState(next);
+    await AsyncStorage.setItem(STORAGE_LOGIN_KEY, JSON.stringify(next));
   };
 
   const moveColumn = async (from, to) => {
@@ -587,15 +607,34 @@ export default function App() {
                   { transform: [{ translateX: shiftAnims[pos] }] },
                 ]}
               >
+                {/* 접속 체크 줄 (맨 왼쪽 칸에 흐릿하게 '접속') */}
+                <TouchableOpacity
+                  style={[styles.missionCell, { height: missionH }]}
+                  disabled={isFinalized}
+                  activeOpacity={0.6}
+                  onPress={() => toggleLogin(colId)}
+                >
+                  <View style={styles.checkInner}>
+                    {pos === 0 && <Text style={styles.rowTag}>접속</Text>}
+                    {loginState[colId] && (
+                      <Text style={[styles.missionCheck, { fontSize: missionH * 0.72 }]}>✓</Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+
+                {/* 미션 체크 줄 (맨 왼쪽 칸에 흐릿하게 '미션') */}
                 <TouchableOpacity
                   style={[styles.missionCell, { height: missionH }]}
                   disabled={isFinalized}
                   activeOpacity={0.6}
                   onPress={() => toggleMission(colId)}
                 >
-                  {missionState[colId] && (
-                    <Text style={[styles.missionCheck, { fontSize: missionH * 0.72 }]}>✓</Text>
-                  )}
+                  <View style={styles.checkInner}>
+                    {pos === 0 && <Text style={styles.rowTag}>미션</Text>}
+                    {missionState[colId] && (
+                      <Text style={[styles.missionCheck, { fontSize: missionH * 0.72 }]}>✓</Text>
+                    )}
+                  </View>
                 </TouchableOpacity>
 
                 <View style={[styles.headerCell, { height: cellSize }]}>
@@ -630,6 +669,9 @@ export default function App() {
                       <Text style={styles.cellLabel} numberOfLines={1}>
                         {SUB_LABELS[colId][rowIndex].split('').join(' ')}
                       </Text>
+                      {rowIndex === 0 && LEVELS[colId] !== null && (
+                        <Text style={styles.cellLevel} numberOfLines={1}>{LEVELS[colId]}</Text>
+                      )}
                     </TouchableOpacity>
                   );
                 })}
@@ -639,7 +681,7 @@ export default function App() {
 
           {/* 헤더 줄 위에 얹은 투명 레이어: 탭 = 뱃지 토글, 길게 누르고 끌기 = 열 이동 */}
           <View
-            style={[styles.dragLayer, { top: missionH, height: cellSize, width: cellSize * COLS }]}
+            style={[styles.dragLayer, { top: missionH * 2, height: cellSize, width: cellSize * COLS }]}
             {...panResponder.panHandlers}
           />
         </View>
@@ -698,6 +740,11 @@ const styles = StyleSheet.create({
   missionCheck: { color: '#2d9c5a', fontWeight: '900' },
 
   cellLabel: { fontSize: 9, color: '#5b6470', fontWeight: '600', textAlign: 'center' },
+  cellLevel: { fontSize: 8, color: '#7b8696', fontWeight: '500', textAlign: 'center', marginTop: 1 },
+
+  // 접속/미션 줄의 맨 왼쪽 칸 이름표 (체크 표시와 나란히 놓이고, 흐릿하게)
+  checkInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  rowTag: { fontSize: 8, color: '#c3cad4', marginRight: 2 },
 
   headerBadge: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
   headerBadgeActive: { backgroundColor: '#ffeaa7', borderWidth: 1, borderColor: '#fdcb6e' },

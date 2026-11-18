@@ -15,6 +15,7 @@ const KEY = {
   finalized: '@gersang_finalized_v8',
   order: '@gersang_col_order_v8',
   mission: '@gersang_mission_v8',
+  login: '@gersang_login_v1', // 접속 체크 (app/(tabs)/index.tsx)
   samin: '@gersang_samin_v1', // 삼인검 { active, records } (app/samingeom.tsx)
 } as const;
 
@@ -186,7 +187,7 @@ export function parseBackup(text: string): ParsedBackup {
   // 우리 앱 기록이 하나도 없는 백업을 불러오면 지금 기록만 지워지므로 막는다
   if (!ALL_KEYS.some((k) => k in d)) return { error: '백업에 기록이 들어 있지 않아요.' };
 
-  for (const k of [KEY.grid, KEY.header, KEY.order, KEY.mission]) {
+  for (const k of [KEY.grid, KEY.header, KEY.order, KEY.mission, KEY.login]) {
     if (k in d && !Array.isArray(d[k])) return bad;
   }
   if (KEY.history in d) {
