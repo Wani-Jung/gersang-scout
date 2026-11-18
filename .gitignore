@@ -18,9 +18,8 @@ expo-env.d.ts
 *.key
 *.mobileprovision
 
-# 서명 키·비밀번호는 절대 커밋하지 않는다. 공개 디버그 키(android/app/debug.keystore)만 예외.
+# 서명 키·비밀번호는 절대 커밋하지 않는다. (예외 없음. 릴리스 키는 GitHub Secrets 에만 있다.)
 *.keystore
-!android/app/debug.keystore
 key.properties
 local.properties
 

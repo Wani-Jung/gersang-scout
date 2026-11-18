@@ -20,8 +20,8 @@ concurrency:
 
 env:
   # 이 지문의 키로 서명됐을 때만 릴리스를 만든다.
-  # v1.0.0 단계: 공개 디버그 키(android/app/debug.keystore). 릴리스 키로 바꿀 때 함께 바꾼다.
-  EXPECTED_CERT_SHA256: fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c
+  # 릴리스 키(GitHub Secrets 의 KEYSTORE_*)의 인증서 SHA-256. 키를 바꾸면 이 값도 함께 바꾼다.
+  EXPECTED_CERT_SHA256: 77fbfd53a7fce0ebca27cd7810fe901f5bc6b398acf6042cb341dfd03fb93b5c
   # versionCode = 10 + 실행 번호. 로컬 빌드에서 이미 2 를 썼으므로 항상 그보다 크게 시작한다.
   VERSION_CODE_BASE: '10'
   # 고정 다운로드 링크를 위해 파일 이름은 항상 같게 한다.
@@ -57,11 +57,25 @@ jobs:
       - name: 의존성 설치
         run: npm ci
 
+      - name: 서명 키 준비
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::KEYSTORE_BASE64 시크릿이 없습니다. 저장소 Settings > Secrets 를 확인하세요."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          echo "KEYSTORE_FILE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+
       - name: APK 빌드
         working-directory: android
         env:
           VERSION_CODE: ${{ steps.ver.outputs.code }}
           VERSION_NAME: ${{ steps.ver.outputs.name }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon \
@@ -74,6 +88,10 @@ jobs:
           EXPECTED_VERSION_CODE: ${{ steps.ver.outputs.code }}
           EXPECTED_VERSION_NAME: ${{ steps.ver.outputs.name }}
         run: bash .github/scripts/verify-apk.sh android/app/build/outputs/apk/release/app-release.apk
+
+      - name: 서명 키 파일 지우기
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.keystore"
 
       - name: 파일 이름 고정
         run: cp android/app/build/outputs/apk/release/app-release.apk "$APK_NAME"

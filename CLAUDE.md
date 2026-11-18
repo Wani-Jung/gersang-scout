@@ -4,10 +4,14 @@
 
 - **설치는 GitHub Release 링크로만 한다. adb(USB 연결)는 쓰지 않는다.**
 - 고정 다운로드 링크: https://github.com/Wani-Jung/gersang-scout/releases/latest/download/gersang-scout.apk
-- **키·비밀번호는 절대 커밋하지 않는다.** `*.keystore`, `key.properties`, `local.properties` 는 `.gitignore` 로 제외돼 있다.
-  예외: 공개 디버그 키 `android/app/debug.keystore` (비밀번호가 공개된 키라 비밀이 아니다. 릴리스 키로 바꿀 때 제거한다).
-  릴리스 키를 쓰게 되면 키스토어는 base64 로 GitHub Secrets 에만 넣는다 (KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD).
+- **키·비밀번호는 절대 커밋하지 않는다.** `*.keystore`, `key.properties`, `local.properties` 는 예외 없이 `.gitignore` 로 제외돼 있다.
   비밀번호를 `gradle.properties` 같은 추적되는 파일에 평문으로 쓰지 않는다.
+- **서명 키**: v1.0.0 은 공개 디버그 키로 서명했고, **v1.1.0 부터 릴리스 키**로 서명한다 (디버그 키 파일은 저장소에서 제거했다).
+  - 릴리스 키는 GitHub Secrets 에만 있다: `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`.
+    워크플로가 실행될 때만 꺼내 쓰고 끝나면 지운다.
+  - 원본 키스토어와 비밀번호는 이 PC 의 `C:\Users\EKR\gersang-keystore-backup\` 에 있다 (`KEYSTORE-INFO.txt` 에 별칭·비밀번호·지문 정리).
+    저장소 밖이며, **잃어버리면 이후 버전을 폰의 기존 앱 위에 덮어 설치할 수 없다.** 다른 곳(USB, 개인 클라우드, 비밀번호 관리자)에도 복사해 둔다.
+  - 이 키의 인증서 SHA-256 은 `release.yml` 의 `EXPECTED_CERT_SHA256` 에 있다.
 - **이 저장소는 공개(public)다. 커밋에 비밀(키·비밀번호·토큰)이 섞이면 즉시 누구에게나 노출되므로, 커밋·푸시 전에 `git diff --staged` 로 확인한다. 한 번 올라간 비밀은 지워도 이력에 남으니 폐기(재발급)한다.**
 - 공개 저장소라 GitHub Actions 사용량은 무제한(무료)이다.
 
@@ -32,5 +36,7 @@
 ## 기타
 
 - `android/` 폴더는 CI 가 바로 빌드하려고 저장소에 커밋돼 있다 (`expo prebuild` 로 재생성하지 않는다).
-- 로컬에서 `android/` 에서 `gradlew assembleRelease` 로 빌드하는 것은 확인용이다. 폰에 설치하는 APK 는 항상 CI 가 만든 것을 쓴다.
+- 로컬에서 `android/` 에서 `gradlew assembleRelease` 로 빌드하는 것은 확인용이다. 서명 환경변수(`KEYSTORE_FILE`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`)가
+  없으면 폰에 설치할 수 있게 서명된 APK 가 나오지 않는다. 폰에 설치하는 APK 는 항상 CI 가 만든 것을 쓴다.
+- 이 저장소의 서명 키를 바꿔야 하면(분실 등) 폰에서 앱 삭제 후 재설치가 필요하다. 위의 💾 백업 절차를 먼저 따른다.
 - CI 는 용량·시간을 줄이려고 `armeabi-v7a, arm64-v8a` 두 ABI 만 빌드한다 (x86 에뮬레이터용은 제외).
