@@ -36,6 +36,7 @@ const STORAGE_LOGIN_KEY = '@gersang_login_v1';   // 접속 체크 (미션처럼 
 // 계정별 대표 캐릭터 레벨. HEADERS 순서(열 번호)대로. 모르는 계정은 null (표시하지 않음).
 //   92(★ 들숨) 260 / mi(들쭉) 210 / 91(한양) 220 / 93(들숨반) 211 / 94(날뻔) 210 / 57(가설) 250 / 58(모자) 미정 / 59(피겜) 221
 const LEVELS: (number | null)[] = [260, 210, 220, 211, 210, 250, null, 221];
+const HIGH_LEVEL = 220; // 이 렙 이상이면 렙 숫자를 진하게(검은색) 표시
 
 // 각 열에서 기본 분모에 들어가는 칸 수 (합계 24칸)
 const ACTIVE_LIMITS = [3, 3, 3, 3, 3, 3, 3, 3];
@@ -650,6 +651,7 @@ export default function App() {
                   const isActive = rowIndex < ACTIVE_LIMITS[colId];
                   const isSpecial = isSpecialCell(rowIndex, colId);
                   const isDisabled = !isActive && !isSpecial;
+                  const level = rowIndex === 0 ? LEVELS[colId] : null; // 대표 캐릭(맨 윗칸)에만 렙 표시
 
                   return (
                     <TouchableOpacity
@@ -669,8 +671,8 @@ export default function App() {
                       <Text style={styles.cellLabel} numberOfLines={1}>
                         {SUB_LABELS[colId][rowIndex].split('').join(' ')}
                       </Text>
-                      {rowIndex === 0 && LEVELS[colId] !== null && (
-                        <Text style={styles.cellLevel} numberOfLines={1}>{LEVELS[colId]}</Text>
+                      {level !== null && (
+                        <Text style={[styles.cellLevel, level >= HIGH_LEVEL && styles.cellLevelHigh]} numberOfLines={1}>{level}</Text>
                       )}
                     </TouchableOpacity>
                   );
@@ -741,6 +743,7 @@ const styles = StyleSheet.create({
 
   cellLabel: { fontSize: 9, color: '#5b6470', fontWeight: '600', textAlign: 'center' },
   cellLevel: { fontSize: 8, color: '#7b8696', fontWeight: '500', textAlign: 'center', marginTop: 1 },
+  cellLevelHigh: { color: '#000', fontWeight: '800' },
 
   // 접속/미션 줄의 맨 왼쪽 칸 이름표 (체크 표시와 나란히 놓이고, 흐릿하게)
   checkInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
