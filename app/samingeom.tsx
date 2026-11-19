@@ -56,6 +56,10 @@ const formatShort = (ts: number) => {
 
 const makeId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
+// 기록 하나의 종류만 바꾼 새 목록 (다른 기록과 다른 값(시각, manual 등)은 그대로)
+const withKind = (records: Record[], id: string, kind: Kind): Record[] =>
+  records.map((x) => (x.id === id ? { ...x, kind } : x));
+
 /* ── 보상 아이콘 ─────────────────────────────────────────── */
 
 // 홍옥상자: 빨간 보석
@@ -259,6 +263,20 @@ export default function SaminScreen() {
     ]);
   };
 
+  // 잘못 기록한 회차의 종류(삼인검/사인검)를 고친다. 기록 줄을 누르면 선택창이 뜬다.
+  const changeKind = (r: Record) => {
+    const cur = kindOf(r.kind);
+    const pick = async (kind: Kind) => {
+      if (kind === cur) return;
+      await save({ ...store, records: withKind(store.records, r.id, kind) });
+    };
+    Alert.alert('임무 종류 변경', `${formatShort(r.startedAt)} ~ ${formatShort(r.completedAt)} 기록`, [
+      { text: `삼인검${cur === 'sam' ? ' (현재)' : ''}`, onPress: () => pick('sam') },
+      { text: `사인검${cur === 'sa' ? ' (현재)' : ''}`, onPress: () => pick('sa') },
+      { text: '취소', style: 'cancel' },
+    ]);
+  };
+
   /* ── 계산 ── */
 
   const count = store.records.length;
@@ -392,9 +410,12 @@ export default function SaminScreen() {
 
         {/* 기록 */}
         <View style={styles.card}>
-          <Text style={styles.cardLabel}>
-            기록 ({count}회{saCount > 0 ? ` · 삼 ${samCount} · 사 ${saCount}` : ''})
-          </Text>
+          <View style={styles.cardHead}>
+            <Text style={styles.cardLabel}>
+              기록 ({count}회{saCount > 0 ? ` · 삼 ${samCount} · 사 ${saCount}` : ''})
+            </Text>
+            {count > 0 && <Text style={styles.hintText}>눌러서 종류 변경</Text>}
+          </View>
 
           {store.active && (
             <View style={styles.logRow}>
@@ -414,7 +435,7 @@ export default function SaminScreen() {
 
           {listed.map((r) => (
             <View key={r.id} style={styles.logRow}>
-              <View style={styles.logLeft}>
+              <Pressable style={({ pressed }) => [styles.logLeft, pressed && styles.pressed]} onPress={() => changeKind(r)}>
                 <View style={[styles.kindChip, { backgroundColor: KINDS[kindOf(r.kind)].color }]}>
                   <Text style={styles.kindChipText}>{KINDS[kindOf(r.kind)].short}</Text>
                 </View>
@@ -423,7 +444,7 @@ export default function SaminScreen() {
                   {'  ·  '}
                   {formatShort(r.startedAt)} ~ {formatShort(r.completedAt)}
                 </Text>
-              </View>
+              </Pressable>
               <Pressable onPress={() => removeRecord(r.id)} hitSlop={12}>
                 <Text style={styles.del}>✕</Text>
               </Pressable>
@@ -587,4 +608,6 @@ const styles = StyleSheet.create({
   kindPickRow: { flexDirection: 'row', marginTop: 10 },
   kindPick: { flex: 1, borderWidth: 1.5, borderColor: '#dfe3e8', borderRadius: 10, paddingVertical: 9, alignItems: 'center', marginHorizontal: 4, backgroundColor: '#fff' },
   kindPickText: { fontSize: 15, fontWeight: 'bold', color: '#6b7280' },
+  hintText: { fontSize: 11, color: '#b4bcc7' },
+  pressed: { opacity: 0.5 },
 });
