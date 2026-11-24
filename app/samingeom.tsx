@@ -14,8 +14,8 @@ const DURATION_MS = 30 * 60 * 60 * 1000;  // 임무 30시간 (삼인검·사인�
 type Kind = 'sam' | 'sa';
 const KIND_LIST: Kind[] = ['sam', 'sa'];
 const KINDS: { [K in Kind]: { label: string; short: string; color: string } } = {
-  sam: { label: '삼인검', short: '삼', color: '#6c5ce7' },
-  sa: { label: '사인검', short: '사', color: '#e17055' },
+  sam: { label: '삼인검', short: '삼', color: '#4b5563' }, // 쥐색 (흰 글씨가 잘 보이는 짙은 회색)
+  sa: { label: '사인검', short: '사', color: '#2a78d6' }, // 파랑
 };
 const kindOf = (k?: Kind): Kind => (k === 'sa' ? 'sa' : 'sam');
 
