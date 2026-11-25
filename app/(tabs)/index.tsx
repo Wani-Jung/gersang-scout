@@ -5,6 +5,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import * as Notifications from 'expo-notifications';
+import LevelEditor from '@/components/level-editor';
+import MainMenu from '@/components/main-menu';
+import { normalizeLevels } from '@/lib/levels';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: false }),
@@ -32,8 +35,10 @@ const STORAGE_FINALIZED_KEY = '@gersang_finalized_v8';
 const STORAGE_ORDER_KEY = '@gersang_col_order_v8';
 const STORAGE_MISSION_KEY = '@gersang_mission_v8';
 const STORAGE_LOGIN_KEY = '@gersang_login_v1';   // 접속 체크 (미션처럼 매일 초기화). lib/backup.ts 의 KEY 와 같은 값
+const STORAGE_LEVELS_KEY = '@gersang_levels_v1'; // 메뉴에서 고친 캐릭 레벨 (폰에만 저장). lib/backup.ts 의 KEY 와 같은 값
 
-// 계정별 대표 캐릭터 레벨. HEADERS 순서(열 번호)대로. 모르는 계정은 null (표시하지 않음).
+// 계정별 대표 캐릭터 레벨의 '기본값'. HEADERS 순서(열 번호)대로. null 은 표시하지 않음.
+// 메뉴 > 캐릭별 레벨 수정에서 고치면 폰에 저장된 값이 대신 쓰인다 (코드를 고칠 필요 없음).
 //   92(★ 들숨) 260 / mi(들쭉) 210 / 91(한양) 220 / 93(들숨반) 211 / 94(날뻔) 210 / 57(가설) 250 / 58(모자) 210 / 59(피겜) 221
 const LEVELS: (number | null)[] = [260, 210, 220, 211, 210, 250, 210, 221];
 const HIGH_LEVEL = 220; // 이 렙 이상이면 렙 숫자를 진하게(검은색) 표시
@@ -96,6 +101,9 @@ export default function App() {
   const [columnOrder, setColumnOrder] = useState(DEFAULT_ORDER);
   const [dragPos, setDragPos] = useState(null);
   const [cellSize, setCellSize] = useState(45);
+  const [levels, setLevels] = useState<(number | null)[]>(LEVELS);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [levelEditOpen, setLevelEditOpen] = useState(false);
 
   // 각 화면 위치의 좌우 이동값. 끌고 있는 열도 이 값을 그대로 쓴다.
   const shiftAnims = useRef(Array.from({ length: COLS }, () => new Animated.Value(0))).current;
@@ -194,11 +202,13 @@ export default function App() {
       const savedOrder = await AsyncStorage.getItem(STORAGE_ORDER_KEY);
       const savedMission = await AsyncStorage.getItem(STORAGE_MISSION_KEY);
       const savedLogin = await AsyncStorage.getItem(STORAGE_LOGIN_KEY);
+      const savedLevels = await AsyncStorage.getItem(STORAGE_LEVELS_KEY);
 
       let currentHistory = savedHistory ? JSON.parse(savedHistory) : [];
       if (savedHeader !== null) setHeaderState(normalizeFlags(JSON.parse(savedHeader)));
       if (savedMission !== null) setMissionState(normalizeFlags(JSON.parse(savedMission)));
       if (savedLogin !== null) setLoginState(normalizeFlags(JSON.parse(savedLogin)));
+      if (savedLevels !== null) setLevels(normalizeLevels(JSON.parse(savedLevels), LEVELS));
 
       // 저장된 열 순서 복원 (개수가 맞는 정상 데이터일 때만)
       if (savedOrder !== null) {
@@ -377,6 +387,17 @@ export default function App() {
     shiftAnims.forEach((v) => { v.stopAnimation(); v.setValue(0); });
   };
 
+  // 화면 이동 (버튼과 메뉴가 같이 쓴다)
+  const openSamin = () => router.push('/samingeom');
+  const openBackup = () => router.push('/backup');
+
+  // 메뉴 > 캐릭별 레벨 수정에서 저장
+  const saveLevels = async (next: (number | null)[]) => {
+    setLevels(next);
+    setLevelEditOpen(false);
+    await AsyncStorage.setItem(STORAGE_LEVELS_KEY, JSON.stringify(next));
+  };
+
   const resetOrder = async () => {
     const defaultOrder = DEFAULT_ORDER;
     columnOrderRef.current = defaultOrder;
@@ -497,10 +518,24 @@ export default function App() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.historyContainer}>
         <View style={styles.titleRow}>
-          <Text style={styles.sectionTitle}>💵 정탐배럭 진행도</Text>
+          <View style={styles.titleLeft}>
+            {/* 메뉴 버튼 (☰): 누르면 여러 메뉴가 열린다 */}
+            <TouchableOpacity
+              style={styles.menuButton}
+              onPress={() => setMenuOpen(true)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="메뉴"
+            >
+              <View style={styles.menuLine} />
+              <View style={styles.menuLine} />
+              <View style={styles.menuLine} />
+            </TouchableOpacity>
+            <Text style={styles.sectionTitle}>💵 정탐배럭 진행도</Text>
+          </View>
           <TouchableOpacity
             style={styles.swordButton}
-            onPress={() => router.push('/samingeom')}
+            onPress={openSamin}
             activeOpacity={0.7}
           >
             <Text style={styles.swordButtonText}>⚔️ 삼인검</Text>
@@ -568,7 +603,7 @@ export default function App() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.resetButton, styles.backupButton]}
-            onPress={() => router.push('/backup')}
+            onPress={openBackup}
             activeOpacity={0.7}
           >
             <Text style={styles.backupIcon}>💾</Text>
@@ -651,7 +686,7 @@ export default function App() {
                   const isActive = rowIndex < ACTIVE_LIMITS[colId];
                   const isSpecial = isSpecialCell(rowIndex, colId);
                   const isDisabled = !isActive && !isSpecial;
-                  const level = rowIndex === 0 ? LEVELS[colId] : null; // 대표 캐릭(맨 윗칸)에만 렙 표시
+                  const level = rowIndex === 0 ? levels[colId] : null; // 대표 캐릭(맨 윗칸)에만 렙 표시
 
                   return (
                     <TouchableOpacity
@@ -689,6 +724,27 @@ export default function App() {
         </View>
         </ScrollView>
       </View>
+
+      <MainMenu
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        items={[
+          { key: 'levels', label: '📈 캐릭별 레벨 수정', onPress: () => setLevelEditOpen(true) },
+          { key: 'samin', label: '⚔️ 삼인검·사인검 기록', onPress: openSamin },
+          { key: 'backup', label: '💾 백업 / 복원', onPress: openBackup },
+          { key: 'reset', label: '↺ 열 순서 초기화', onPress: resetOrder },
+        ]}
+      />
+
+      <LevelEditor
+        visible={levelEditOpen}
+        headers={HEADERS}
+        names={SUB_LABELS.map((r) => (r[0] === '★' ? '★ 들숨' : r[0]))} // ★ 칸은 메인 캐릭 '들숨'
+        levels={levels}
+        highLevel={HIGH_LEVEL}
+        onClose={() => setLevelEditOpen(false)}
+        onSave={saveLevels}
+      />
     </SafeAreaView>
   );
 }
@@ -700,6 +756,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f7fa' },
   historyContainer: { flex: 1, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 6 },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  titleLeft: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 },
+  menuButton: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', marginRight: 8, elevation: 2 },
+  menuLine: { width: 15, height: 2, borderRadius: 1, backgroundColor: '#4b5563', marginVertical: 1.5 },
   sectionTitle: { fontSize: 22, fontWeight: 'bold', color: '#333' },
   swordButton: { backgroundColor: '#fff', paddingVertical: 7, paddingHorizontal: 12, borderRadius: 18, elevation: 2 },
   swordButtonText: { fontSize: 13, fontWeight: 'bold', color: '#6c5ce7' },

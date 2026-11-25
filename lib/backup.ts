@@ -16,6 +16,7 @@ const KEY = {
   order: '@gersang_col_order_v8',
   mission: '@gersang_mission_v8',
   login: '@gersang_login_v1', // 접속 체크 (app/(tabs)/index.tsx)
+  levels: '@gersang_levels_v1', // 메뉴에서 고친 캐릭 레벨 [숫자 | null] (app/(tabs)/index.tsx)
   samin: '@gersang_samin_v1', // 삼인검 { active, records } (app/samingeom.tsx)
 } as const;
 
@@ -195,6 +196,10 @@ export function parseBackup(text: string): ParsedBackup {
     if (!Array.isArray(h) || !h.every((it) => isPlainObject(it) && typeof it.date === 'string')) return bad;
   }
   if (KEY.finalized in d && typeof d[KEY.finalized] !== 'boolean') return bad;
+  if (KEY.levels in d) {
+    const v = d[KEY.levels];
+    if (!Array.isArray(v) || !v.every((x) => x === null || isNum(x))) return bad;
+  }
   if (KEY.date in d) {
     const v = d[KEY.date];
     if (typeof v !== 'string' || !/^\d{4}-\d{1,2}-\d{1,2}$/.test(v)) return bad;
