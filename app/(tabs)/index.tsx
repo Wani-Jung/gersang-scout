@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, Animated, PanResponder } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, Animated, PanResponder, Linking } from 'react-native';
 // 안드로이드에서도 상태표시줄·하단 내비게이션 바를 실제로 비켜주는 SafeAreaView
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -36,6 +36,9 @@ const STORAGE_ORDER_KEY = '@gersang_col_order_v8';
 const STORAGE_MISSION_KEY = '@gersang_mission_v8';
 const STORAGE_LOGIN_KEY = '@gersang_login_v1';   // 접속 체크 (미션처럼 매일 초기화). lib/backup.ts 의 KEY 와 같은 값
 const STORAGE_LEVELS_KEY = '@gersang_levels_v1'; // 메뉴에서 고친 캐릭 레벨 (폰에만 저장). lib/backup.ts 의 KEY 와 같은 값
+
+// 항상 최신 릴리스 APK 를 가리키는 고정 다운로드 링크 (README, CLAUDE.md, release.yml 의 APK_NAME 과 같은 주소)
+const UPDATE_URL = 'https://github.com/Wani-Jung/gersang-scout/releases/latest/download/gersang-scout.apk';
 
 // 계정별 대표 캐릭터 레벨의 '기본값'. HEADERS 순서(열 번호)대로. null 은 표시하지 않음.
 // 메뉴 > 캐릭별 레벨 수정에서 고치면 폰에 저장된 값이 대신 쓰인다 (코드를 고칠 필요 없음).
@@ -391,6 +394,23 @@ export default function App() {
   const openSamin = () => router.push('/samingeom');
   const openBackup = () => router.push('/backup');
 
+  // 메뉴 > 업데이트: 고정 링크(항상 최신 릴리스 APK)를 브라우저로 열어서 내려받게 한다
+  const openUpdate = () => {
+    Alert.alert(
+      '최신 버전으로 업데이트',
+      '최신 APK를 내려받아요.\n다운로드가 끝나면 알림이나 다운로드 폴더에서 파일을 눌러 설치하세요.\n\n지금 앱은 지우지 말고 그대로 설치하면 덮어써지고 기록은 유지돼요.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '내려받기',
+          onPress: () => {
+            Linking.openURL(UPDATE_URL).catch(() => Alert.alert('링크를 열 수 없어요', UPDATE_URL));
+          },
+        },
+      ]
+    );
+  };
+
   // 메뉴 > 캐릭별 레벨 수정에서 저장
   const saveLevels = async (next: (number | null)[]) => {
     setLevels(next);
@@ -733,6 +753,7 @@ export default function App() {
           { key: 'samin', label: '⚔️ 삼인검·사인검 기록', onPress: openSamin },
           { key: 'backup', label: '💾 백업 / 복원', onPress: openBackup },
           { key: 'reset', label: '↺ 열 순서 초기화', onPress: resetOrder },
+          { key: 'update', label: '⬆️ 최신 버전으로 업데이트', onPress: openUpdate },
         ]}
       />
 
