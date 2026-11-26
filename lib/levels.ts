@@ -29,3 +29,17 @@ export function parseLevel(text: string): number | null | undefined {
   const n = Number(t);
   return isLevel(n) ? n : undefined;
 }
+
+/** 대표 캐릭이 아닌 나머지 캐릭(각 계정 2·3번째 칸)의 기본 레벨 */
+export const SUB_LEVEL_DEFAULT = 210;
+
+/**
+ * 나머지 캐릭 레벨(폰에 저장된 값)을 [계정][칸 2개] 모양으로 맞춘다.
+ * 이상한 칸은 기본값(210), null 은 '표시 안 함'으로 존중한다.
+ */
+export function normalizeSubLevels(raw: unknown, cols: number, perCol = 2): (number | null)[][] {
+  const rows = Array.isArray(raw) ? raw : [];
+  return Array.from({ length: cols }, (_, c) =>
+    normalizeLevels(rows[c], Array.from({ length: perCol }, () => SUB_LEVEL_DEFAULT))
+  );
+}

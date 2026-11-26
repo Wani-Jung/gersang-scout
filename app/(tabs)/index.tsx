@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import LevelEditor from '@/components/level-editor';
 import MainMenu from '@/components/main-menu';
-import { normalizeLevels } from '@/lib/levels';
+import { normalizeLevels, normalizeSubLevels } from '@/lib/levels';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: false }),
@@ -35,7 +35,8 @@ const STORAGE_FINALIZED_KEY = '@gersang_finalized_v8';
 const STORAGE_ORDER_KEY = '@gersang_col_order_v8';
 const STORAGE_MISSION_KEY = '@gersang_mission_v8';
 const STORAGE_LOGIN_KEY = '@gersang_login_v1';   // 접속 체크 (미션처럼 매일 초기화). lib/backup.ts 의 KEY 와 같은 값
-const STORAGE_LEVELS_KEY = '@gersang_levels_v1'; // 메뉴에서 고친 캐릭 레벨 (폰에만 저장). lib/backup.ts 의 KEY 와 같은 값
+const STORAGE_LEVELS_KEY = '@gersang_levels_v1'; // 메뉴에서 고친 대표 캐릭(맨 윗칸) 레벨 [계정] (폰에만 저장). lib/backup.ts 의 KEY 와 같은 값
+const STORAGE_SUBLEVELS_KEY = '@gersang_sublevels_v1'; // 나머지 캐릭(2·3번째 칸) 레벨 [계정][2] (폰에만 저장, 기본 210). lib/backup.ts 의 KEY 와 같은 값
 
 // 항상 최신 릴리스 APK 를 가리키는 고정 다운로드 링크 (README, CLAUDE.md, release.yml 의 APK_NAME 과 같은 주소)
 const UPDATE_URL = 'https://github.com/Wani-Jung/gersang-scout/releases/latest/download/gersang-scout.apk';
@@ -104,7 +105,8 @@ export default function App() {
   const [columnOrder, setColumnOrder] = useState(DEFAULT_ORDER);
   const [dragPos, setDragPos] = useState(null);
   const [cellSize, setCellSize] = useState(45);
-  const [levels, setLevels] = useState<(number | null)[]>(LEVELS);
+  // 캐릭 레벨 [계정][칸 0~2]. 맨 윗칸은 LEVELS, 나머지는 기본 210 에서 시작
+  const [levels, setLevels] = useState<(number | null)[][]>(() => LEVELS.map((l, c) => [l, ...normalizeSubLevels(null, COLS)[c]]));
   const [menuOpen, setMenuOpen] = useState(false);
   const [levelEditOpen, setLevelEditOpen] = useState(false);
 
@@ -206,12 +208,17 @@ export default function App() {
       const savedMission = await AsyncStorage.getItem(STORAGE_MISSION_KEY);
       const savedLogin = await AsyncStorage.getItem(STORAGE_LOGIN_KEY);
       const savedLevels = await AsyncStorage.getItem(STORAGE_LEVELS_KEY);
+      const savedSubLevels = await AsyncStorage.getItem(STORAGE_SUBLEVELS_KEY);
 
       let currentHistory = savedHistory ? JSON.parse(savedHistory) : [];
       if (savedHeader !== null) setHeaderState(normalizeFlags(JSON.parse(savedHeader)));
       if (savedMission !== null) setMissionState(normalizeFlags(JSON.parse(savedMission)));
       if (savedLogin !== null) setLoginState(normalizeFlags(JSON.parse(savedLogin)));
-      if (savedLevels !== null) setLevels(normalizeLevels(JSON.parse(savedLevels), LEVELS));
+      {
+        const top = normalizeLevels(savedLevels !== null ? JSON.parse(savedLevels) : null, LEVELS);
+        const sub = normalizeSubLevels(savedSubLevels !== null ? JSON.parse(savedSubLevels) : null, COLS);
+        setLevels(top.map((l, c) => [l, ...sub[c]]));
+      }
 
       // 저장된 열 순서 복원 (개수가 맞는 정상 데이터일 때만)
       if (savedOrder !== null) {
@@ -412,10 +419,13 @@ export default function App() {
   };
 
   // 메뉴 > 캐릭별 레벨 수정에서 저장
-  const saveLevels = async (next: (number | null)[]) => {
+  const saveLevels = async (next: (number | null)[][]) => {
     setLevels(next);
     setLevelEditOpen(false);
-    await AsyncStorage.setItem(STORAGE_LEVELS_KEY, JSON.stringify(next));
+    await AsyncStorage.multiSet([
+      [STORAGE_LEVELS_KEY, JSON.stringify(next.map((c) => c[0]))],
+      [STORAGE_SUBLEVELS_KEY, JSON.stringify(next.map((c) => c.slice(1)))],
+    ]);
   };
 
   const resetOrder = async () => {
@@ -706,7 +716,7 @@ export default function App() {
                   const isActive = rowIndex < ACTIVE_LIMITS[colId];
                   const isSpecial = isSpecialCell(rowIndex, colId);
                   const isDisabled = !isActive && !isSpecial;
-                  const level = rowIndex === 0 ? levels[colId] : null; // 대표 캐릭(맨 윗칸)에만 렙 표시
+                  const level = levels[colId][rowIndex] ?? null;
 
                   return (
                     <TouchableOpacity
@@ -750,9 +760,6 @@ export default function App() {
         onClose={() => setMenuOpen(false)}
         items={[
           { key: 'levels', label: '📈 캐릭별 레벨 수정', onPress: () => setLevelEditOpen(true) },
-          { key: 'samin', label: '⚔️ 삼인검·사인검 기록', onPress: openSamin },
-          { key: 'backup', label: '💾 백업 / 복원', onPress: openBackup },
-          { key: 'reset', label: '↺ 열 순서 초기화', onPress: resetOrder },
           { key: 'update', label: '⬆️ 최신 버전으로 업데이트', onPress: openUpdate },
         ]}
       />
@@ -760,7 +767,8 @@ export default function App() {
       <LevelEditor
         visible={levelEditOpen}
         headers={HEADERS}
-        names={SUB_LABELS.map((r) => (r[0] === '★' ? '★ 들숨' : r[0]))} // ★ 칸은 메인 캐릭 '들숨'
+        names={SUB_LABELS.map((r) => r.map((n) => (n === '★' ? '★들숨' : n)))} // ★ 칸은 메인 캐릭 '들숨'
+        order={columnOrder}
         levels={levels}
         highLevel={HIGH_LEVEL}
         onClose={() => setLevelEditOpen(false)}
