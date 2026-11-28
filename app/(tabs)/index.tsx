@@ -24,6 +24,17 @@ const SUB_LABELS = [
   ['모자', '맨끝소', '참심판'],
   ['피겜', '지녀스', '소사겜'],
 ];
+// [국적] 버튼을 켰을 때 이름 대신 보여 줄 국적·성별 (SUB_LABELS 와 같은 자리). 사용자가 준 국적표 기준
+const NATIONS = [
+  ['중남2', '중남', '조녀'],
+  ['중녀', '일녀', '대남'],
+  ['중남', '조녀', '조남'],
+  ['중남', '중남', '일남'],
+  ['대녀', '대남', '일남'],
+  ['일남', '조녀', '대녀'],
+  ['중남', '대남', '일녀'],
+  ['일녀', '대남', '조남'],
+];
 const ROWS = 3;
 const COLS = 8;           // 전체 계정 수
 const VISIBLE_COLS = 8;   // 화면에 한 번에 보이는 칸 수 (칸 크기 기준)
@@ -109,6 +120,7 @@ export default function App() {
   const [levels, setLevels] = useState<(number | null)[][]>(() => LEVELS.map((l, c) => [l, ...normalizeSubLevels(null, COLS)[c]]));
   const [menuOpen, setMenuOpen] = useState(false);
   const [levelEditOpen, setLevelEditOpen] = useState(false);
+  const [nationView, setNationView] = useState(false); // [국적] 보기: 칸에 이름 대신 국적·성별, 칸 누르기는 막음
 
   // 각 화면 위치의 좌우 이동값. 끌고 있는 열도 이 값을 그대로 쓴다.
   const shiftAnims = useRef(Array.from({ length: COLS }, () => new Animated.Value(0))).current;
@@ -628,6 +640,14 @@ export default function App() {
         </View>
 
         <View style={styles.resetRow}>
+          <TouchableOpacity
+            style={[styles.nationButton, nationView && styles.nationButtonOn]}
+            onPress={() => setNationView((v) => !v)}
+            activeOpacity={0.7}
+            accessibilityLabel={nationView ? '국적 보기 끄기' : '국적 보기'}
+          >
+            <Text style={[styles.nationText, nationView && styles.nationTextOn]}>국적</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.resetButton} onPress={resetOrder} activeOpacity={0.7}>
             <Text style={styles.resetIcon}>↺</Text>
           </TouchableOpacity>
@@ -721,7 +741,7 @@ export default function App() {
                   return (
                     <TouchableOpacity
                       key={rowIndex}
-                      disabled={isFinalized || isDisabled}
+                      disabled={isFinalized || isDisabled || nationView}
                       style={[
                         styles.cell,
                         { height: cellSize },
@@ -734,7 +754,7 @@ export default function App() {
                     >
                       {isHighlightCell(rowIndex, colId) && <View style={styles.firstCellHighlight} pointerEvents="none" />}
                       <Text style={styles.cellLabel} numberOfLines={1}>
-                        {SUB_LABELS[colId][rowIndex].split('').join(' ')}
+                        {(nationView ? NATIONS[colId][rowIndex] : SUB_LABELS[colId][rowIndex]).split('').join(' ')}
                       </Text>
                       {level !== null && (
                         <Text style={[styles.cellLevel, level >= HIGH_LEVEL && styles.cellLevelHigh]} numberOfLines={1}>{level}</Text>
@@ -813,6 +833,11 @@ const styles = StyleSheet.create({
   historyMission: { fontSize: 15, color: '#8c7ae6', fontWeight: 'bold', marginLeft: 10 },
 
   resetRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingTop: 6 },
+  // [국적] 버튼: 가운데 버튼들과 상관없이 왼쪽 끝에 둔다
+  nationButton: { position: 'absolute', left: 16, bottom: 0, height: 34, paddingHorizontal: 14, borderRadius: 17, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', elevation: 2 },
+  nationButtonOn: { backgroundColor: '#6c5ce7' },
+  nationText: { fontSize: 14, fontWeight: 'bold', color: '#636e72' },
+  nationTextOn: { color: '#fff' },
   backupButton: { marginLeft: 14 },
   backupIcon: { fontSize: 16, lineHeight: 22 },
   resetButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', elevation: 2 },
