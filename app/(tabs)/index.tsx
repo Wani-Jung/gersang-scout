@@ -10,7 +10,7 @@ import MainMenu from '@/components/main-menu';
 import { normalizeLevels, normalizeSubLevels } from '@/lib/levels';
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: false }),
+  handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
 });
 
 const HEADERS = ['92', 'mi', '91', '93', '94', '57', '58', '59'];
@@ -62,28 +62,32 @@ const HIGH_LEVEL = 220; // 이 렙 이상이면 렙 숫자를 진하게(검은�
 const ACTIVE_LIMITS = [3, 3, 3, 3, 3, 3, 3, 3];
 
 // 체크했을 때만 분모에 추가되는 보너스 칸 (지금은 없음)
-const isSpecialCell = (r, c) => false;
+const isSpecialCell = (_r: number, _c: number) => false;
 
 // 검은 테두리로 강조할 칸: 92의 ★, 57의 가설
 const HIGHLIGHT_CELLS = [[0, 0], [5, 0]];
-const isHighlightCell = (r, c) => HIGHLIGHT_CELLS.some(([hc, hr]) => hc === c && hr === r);
+const isHighlightCell = (r: number, c: number) => HIGHLIGHT_CELLS.some(([hc, hr]) => hc === c && hr === r);
 
 // 기본 열 배치
 const DEFAULT_ORDER = [0, 1, 2, 3, 4, 5, 6, 7];
 
 // 저장된 데이터가 예전 8칸짜리여도 깨지지 않게 크기를 맞춰줌
-const normalizeGrid = (g) =>
+const normalizeGrid = (g: unknown): boolean[][] =>
   Array.from({ length: ROWS }, (_, r) =>
-    Array.from({ length: COLS }, (_, c) => !!(g && g[r] && g[r][c]))
+    Array.from({ length: COLS }, (_, c) => !!(Array.isArray(g) && Array.isArray(g[r]) && g[r][c]))
   );
 
 // 기록을 월별로 묶는다. 연도가 없는 예전 기록은 최신부터 거슬러 올라가며 추정한다.
-const buildMonths = (list) => {
+// 하루 기록 한 줄 (예전 기록에는 year·mission 이 없을 수 있다)
+type HistoryItem = { date: string; year?: number; completed: number; total: number; mission?: number; missionTotal?: number };
+type MonthGroup = { key: string; year: number; month: number; items: HistoryItem[] };
+
+const buildMonths = (list: HistoryItem[]): MonthGroup[] => {
   const now = new Date();
   let year = now.getFullYear();
   let prevMonth = now.getMonth() + 1;
-  const out = [];
-  let cur = null;
+  const out: MonthGroup[] = [];
+  let cur: MonthGroup | null = null;
 
   for (const item of list) {
     const m = parseInt(item.date, 10);
@@ -101,8 +105,8 @@ const buildMonths = (list) => {
   return out;
 };
 
-const normalizeFlags = (a) =>
-  Array.from({ length: COLS }, (_, c) => !!(a && a[c]));
+const normalizeFlags = (a: unknown): boolean[] =>
+  Array.from({ length: COLS }, (_, c) => !!(Array.isArray(a) && a[c]));
 
 export default function App() {
   const router = useRouter();
@@ -110,11 +114,11 @@ export default function App() {
   const [headerState, setHeaderState] = useState(Array(COLS).fill(false));
   const [missionState, setMissionState] = useState(Array(COLS).fill(false));
   const [loginState, setLoginState] = useState(Array(COLS).fill(false));
-  const [historyData, setHistoryData] = useState([]);
+  const [historyData, setHistoryData] = useState<HistoryItem[]>([]);
   const [monthIndex, setMonthIndex] = useState(0);
   const [isFinalized, setIsFinalized] = useState(false);
   const [columnOrder, setColumnOrder] = useState(DEFAULT_ORDER);
-  const [dragPos, setDragPos] = useState(null);
+  const [dragPos, setDragPos] = useState<number | null>(null);
   const [cellSize, setCellSize] = useState(45);
   // 캐릭 레벨 [계정][칸 0~2]. 맨 윗칸은 LEVELS, 나머지는 기본 210 에서 시작
   const [levels, setLevels] = useState<(number | null)[][]>(() => LEVELS.map((l, c) => [l, ...normalizeSubLevels(null, COLS)[c]]));
@@ -124,22 +128,22 @@ export default function App() {
 
   // 각 화면 위치의 좌우 이동값. 끌고 있는 열도 이 값을 그대로 쓴다.
   const shiftAnims = useRef(Array.from({ length: COLS }, () => new Animated.Value(0))).current;
-  const targetPosRef = useRef(null);
+  const targetPosRef = useRef<number | null>(null);
   const colWidthRef = useRef(0);
   const columnOrderRef = useRef(columnOrder);
   const headerStateRef = useRef(headerState);
   const finalizedRef = useRef(isFinalized);
-  const dragPosRef = useRef(null);
-  const scrollRef = useRef(null);
+  const dragPosRef = useRef<number | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
   const scrollXRef = useRef(0);
   const containerLeftRef = useRef(0);
   const visibleWidthRef = useRef(0);
   const fingerXRef = useRef(0);      // 손가락의 화면상 x
   const contentStartXRef = useRef(0); // 잡기 시작한 지점의 격자 내부 x
-  const autoScrollTimer = useRef(null);
+  const autoScrollTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const grantPosRef = useRef(0);
   const movedRef = useRef(false);
-  const longPressTimer = useRef(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => { columnOrderRef.current = columnOrder; }, [columnOrder]);
   useEffect(() => { headerStateRef.current = headerState; }, [headerState]);
@@ -184,7 +188,7 @@ export default function App() {
     setupNotifications(completedCount, totalActiveCount, missionCount);
   }, [completedCount, totalActiveCount, missionCount]);
 
-  const setupNotifications = async (completed, total, mission) => {
+  const setupNotifications = async (completed: number, total: number, mission: number) => {
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
     if (existingStatus !== 'granted') {
@@ -200,13 +204,13 @@ export default function App() {
     await Notifications.scheduleNotificationAsync({
       identifier: 'daily-1130',
       content: { title: "정탐배럭", body: `정탐 ${completed}/${total}, 임무 ${mission}/${COLS} 입니다.` },
-      trigger: { hour: 11, minute: 30, repeats: true },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour: 11, minute: 30 },
     });
 
     await Notifications.scheduleNotificationAsync({
       identifier: 'daily-2200',
       content: { title: "정탐배럭", body: `정탐 ${completed}/${total}, 임무 ${mission}/${COLS} 입니다.` },
-      trigger: { hour: 22, minute: 0, repeats: true },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour: 22, minute: 0 },
     });
   };
 
@@ -222,7 +226,7 @@ export default function App() {
       const savedLevels = await AsyncStorage.getItem(STORAGE_LEVELS_KEY);
       const savedSubLevels = await AsyncStorage.getItem(STORAGE_SUBLEVELS_KEY);
 
-      let currentHistory = savedHistory ? JSON.parse(savedHistory) : [];
+      let currentHistory: HistoryItem[] = savedHistory ? JSON.parse(savedHistory) : [];
       if (savedHeader !== null) setHeaderState(normalizeFlags(JSON.parse(savedHeader)));
       if (savedMission !== null) setMissionState(normalizeFlags(JSON.parse(savedMission)));
       if (savedLogin !== null) setLoginState(normalizeFlags(JSON.parse(savedLogin)));
@@ -343,7 +347,7 @@ export default function App() {
     ]);
   };
 
-  const toggleButton = async (rowIndex, colId) => {
+  const toggleButton = async (rowIndex: number, colId: number) => {
     if (isFinalized) return;
     if (!(rowIndex < ACTIVE_LIMITS[colId]) && !isSpecialCell(rowIndex, colId)) return;
 
@@ -354,7 +358,7 @@ export default function App() {
     await AsyncStorage.setItem(STORAGE_GRID_KEY, JSON.stringify(newState));
   };
 
-  const toggleHeader = async (colId) => {
+  const toggleHeader = async (colId: number) => {
     if (finalizedRef.current) return;
     const newHeaderState = [...headerStateRef.current];
     newHeaderState[colId] = !newHeaderState[colId];
@@ -363,7 +367,7 @@ export default function App() {
     await AsyncStorage.setItem(STORAGE_HEADER_KEY, JSON.stringify(newHeaderState));
   };
 
-  const toggleMission = async (colId) => {
+  const toggleMission = async (colId: number) => {
     if (isFinalized) return;
     const next = [...missionState];
     next[colId] = !next[colId];
@@ -379,7 +383,7 @@ export default function App() {
     await AsyncStorage.setItem(STORAGE_LOGIN_KEY, JSON.stringify(next));
   };
 
-  const moveColumn = async (from, to) => {
+  const moveColumn = async (from: number, to: number) => {
     if (from === to) return;
     const newOrder = [...columnOrderRef.current];
     const [moved] = newOrder.splice(from, 1);
@@ -390,7 +394,7 @@ export default function App() {
   };
 
   // 끌고 있는 열이 비집고 들어갈 자리를 만들어주도록 옆 열들을 밀어냄
-  const applyShifts = (from, to, w) => {
+  const applyShifts = (from: number, to: number, w: number) => {
     for (let p = 0; p < COLS; p++) {
       if (p === from) continue; // 끌고 있는 열은 손가락이 직접 제어
       let offset = 0;
@@ -451,7 +455,7 @@ export default function App() {
   const stopAutoScroll = () => {
     if (autoScrollTimer.current) {
       clearInterval(autoScrollTimer.current);
-      autoScrollTimer.current = null;
+      autoScrollTimer.current = undefined;
     }
   };
 
