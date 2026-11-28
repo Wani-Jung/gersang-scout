@@ -120,7 +120,7 @@ export default function App() {
   const [levels, setLevels] = useState<(number | null)[][]>(() => LEVELS.map((l, c) => [l, ...normalizeSubLevels(null, COLS)[c]]));
   const [menuOpen, setMenuOpen] = useState(false);
   const [levelEditOpen, setLevelEditOpen] = useState(false);
-  const [nationView, setNationView] = useState(false); // [국적] 보기: 칸에 이름 대신 국적·성별, 칸 누르기는 막음
+  const [nationView, setNationView] = useState(false); // [국적] 보기: 칸에 이름 대신 국적·성별 (칸 누르기는 평소처럼 된다)
 
   // 각 화면 위치의 좌우 이동값. 끌고 있는 열도 이 값을 그대로 쓴다.
   const shiftAnims = useRef(Array.from({ length: COLS }, () => new Animated.Value(0))).current;
@@ -741,7 +741,7 @@ export default function App() {
                   return (
                     <TouchableOpacity
                       key={rowIndex}
-                      disabled={isFinalized || isDisabled || nationView}
+                      disabled={isFinalized || isDisabled}
                       style={[
                         styles.cell,
                         { height: cellSize },
